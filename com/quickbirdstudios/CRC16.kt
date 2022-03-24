@@ -2,10 +2,10 @@ package com.quickbirdstudios
 
 /// Class to conveniently calculate CRC-16. It uses the CRC16-CCITT polynomial (0x1021)  by default
 @ExperimentalUnsignedTypes
-class CRC16(val polynomial: UShort = 0x1021.toUShort()) : CRC<UShort> {
+class CRC16(val polynomial: UShort = 0x1021.toUShort(), val init: UShort = 0x1d0f.toUShort()) : CRC<UShort> {
     override val lookupTable: List<UShort> = (0 until 256).map { crc16(it.toUByte(), polynomial) }
 
-    override var value: UShort = 0.toUShort()
+    override var value: UShort = init
         private set
 
     override fun update(inputs: UByteArray) {
@@ -13,10 +13,10 @@ class CRC16(val polynomial: UShort = 0x1021.toUShort()) : CRC<UShort> {
     }
 
     override fun reset() {
-        value = 0.toUShort()
+        value = init
     }
 
-    private fun crc16(inputs: UByteArray, initialValue: UShort = 0.toUShort()): UShort {
+    private fun crc16(inputs: UByteArray, initialValue: UShort = init): UShort {
         return inputs.fold(initialValue) { remainder, byte ->
             val bigEndianInput = byte.toBigEndianUShort()
             val index = (bigEndianInput xor remainder) shr 8
