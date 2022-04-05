@@ -75,8 +75,11 @@ open class ConfigStructure {
      * @return the calculated CRC16 value
      */
     fun calculateCrc16(buffer: ByteBuffer): UShort {
-        val arr = ByteArray(buffer.remaining())
+        buffer.flip()
+
+        val arr = ByteArray(buffer.limit())
         buffer.get(arr)
+        buffer.compact()
 
         // determine CRC16
         //val crc16 = CRC16()
@@ -187,7 +190,7 @@ class UInt8(override val name: String) : DataField {
 
     override fun writeTo(buffer: ByteBuffer) {
         if (value == null) {
-            throw Exception("value of field ${name} is null, cannot serialize it")
+            throw Exception("no value for field ${name} defined, cannot serialize it")
         }
         value?.let { buffer.put(it.toByte()) }
     }
@@ -205,7 +208,7 @@ class UInt16(override val name: String) : DataField {
 
     override fun writeTo(buffer: ByteBuffer) {
         if (value == null) {
-            throw Exception("value of field ${name} is null, cannot serialize it")
+            throw Exception("no value for field ${name} defined, cannot serialize it")
         }
         value?.let { buffer.putShort(it.toShort()) }
     }
@@ -223,7 +226,7 @@ class UInt32(override val name: String) : DataField {
 
     override fun writeTo(buffer: ByteBuffer) {
         if (value == null) {
-            throw Exception("value of field ${name} is null, cannot serialize it")
+            throw Exception("no value for field ${name} defined, cannot serialize it")
         }
         value?.let { buffer.putInt(it.toInt()) }
     }
@@ -241,7 +244,7 @@ class UInt64(override val name: String) : DataField {
 
     override fun writeTo(buffer: ByteBuffer) {
         if (value == null) {
-            throw Exception("value of field ${name} is null, cannot serialize it")
+            throw Exception("no value for field ${name} defined, cannot serialize it")
         }
         value?.let { buffer.putLong(it.toLong()) }
     }
@@ -281,8 +284,6 @@ class ConfigPof (
     // visualisieren kann. Oder gibt es immer DefaultValues (so wie hier aktuell
     // implementiert)?
     var pofStructVersion: UInt8 = UInt8("pofStructVersion"),
-    // val hwType: UByte,
-    // val hwRevision: UByte,
     var hwNumber: UInt16 = UInt16("hwNumnber"),
     var cpuSerial: UInt32 = UInt32("cpuSerial"),
     var crc: UInt16 = UInt16("crc"),
@@ -342,6 +343,14 @@ fun decodeConfig() {
         unpack(byteArray)
     }
 
+
+    val byteArray = configPof.pack().let {
+        val arr = ByteArray(it.position())
+        it.get(arr)
+        arr
+    }
+
+    println("bytearray is: ${byteArray}")
 
 
     // val buffer = ByteBuffer.wrap(byteArray).order(ByteOrder.LITTLE_ENDIAN)
