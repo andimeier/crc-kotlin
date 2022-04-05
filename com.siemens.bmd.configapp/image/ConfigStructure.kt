@@ -296,7 +296,7 @@ class ConfigPof (
     // visualisieren kann. Oder gibt es immer DefaultValues (so wie hier aktuell
     // implementiert)?
     var pofStructVersion: UInt8 = UInt8("pofStructVersion"),
-    var hwNumber: UInt16 = UInt16("hwNumnber"),
+    var hwNumber: UInt16 = UInt16("hwNumber"),
     var cpuSerial: UInt32 = UInt32("cpuSerial"),
     var crc: UInt16 = UInt16("crc"),
 
