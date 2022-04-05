@@ -38,9 +38,6 @@ open class ConfigStructure {
      */
     fun packFields(buffer: ByteBuffer, fields: List<DataField>) {
         fields.forEach {
-            // if (it.value == null) {
-            //     throw Exception("value of field ${it.name} is null, cannot serialize it")
-            // }
             it.writeTo(buffer)
         }
     }
@@ -54,9 +51,6 @@ open class ConfigStructure {
      */
     fun unpackFields(buffer: ByteBuffer, fields: List<DataField>) {
         fields.forEach {
-            // if (it.value == null) {
-            //     throw Exception("value of field ${it.name} is null, cannot read it")
-            // }
             it.getFrom(buffer)
         }
     }
@@ -166,7 +160,12 @@ open class ConfigStructure {
  * This interface enables the fields to be serialized/deserialized
  * to/from a given ByteBuffer.
  */
-abstract class DataField(open val name: String) {
+interface DataField {
+
+    /**
+     * The name of this data field, used for output/logging.
+     */
+    abstract val name: String
 
     /**
      * Write the value of this data field to an existing ByteBuffer, modifying it.
@@ -183,7 +182,7 @@ abstract class DataField(open val name: String) {
 /**
  * Class representing a UInt8 data field.
  */
-class UInt8(override val name: String) : DataField(name) {
+class UInt8(override val name: String) : DataField {
     public var value: UByte? = null
 
     override fun writeTo(buffer: ByteBuffer) {
@@ -201,7 +200,7 @@ class UInt8(override val name: String) : DataField(name) {
 /**
  * Class representing a UInt16 data field.
  */
-class UInt16(override val name: String) : DataField(name) {
+class UInt16(override val name: String) : DataField {
     public var value: UShort? = null
 
     override fun writeTo(buffer: ByteBuffer) {
@@ -219,7 +218,7 @@ class UInt16(override val name: String) : DataField(name) {
 /**
  * Class representing a UInt32 data field.
  */
-class UInt32(override val name: String) : DataField(name) {
+class UInt32(override val name: String) : DataField {
     public var value: UInt? = null
 
     override fun writeTo(buffer: ByteBuffer) {
@@ -237,7 +236,7 @@ class UInt32(override val name: String) : DataField(name) {
 /**
  * Class representing a UInt64 data field.
  */
-class UInt64(override val name: String) : DataField(name) {
+class UInt64(override val name: String) : DataField {
     public var value: ULong? = null
 
     override fun writeTo(buffer: ByteBuffer) {
@@ -259,7 +258,7 @@ class UInt64(override val name: String) : DataField(name) {
  * read bytes will be dismissed (ignored), except for contributing
  * to the checksum.
  */
- class NullBytes(override val name: String, val size: Int) : DataField(name) {
+ class NullBytes(override val name: String, val size: Int) : DataField {
      
     override fun writeTo(buffer: ByteBuffer) {
         val arr = ByteArray(size) { _ -> 0x00 }
@@ -374,6 +373,8 @@ fun decodeConfig() {
     //     crc=crc16.value
     // )
     println(configPof)
+
+    println("cpuSerial is: ${configPof.cpuSerial.value}")
 }
 
 fun main() {
