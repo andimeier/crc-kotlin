@@ -75,38 +75,16 @@ open class ConfigStructure {
      * @return the calculated CRC16 value
      */
     fun calculateCrc16(buffer: ByteBuffer): UShort {
-        buffer.duplicate().let {
-            println("[a1] position=${it.position()}, limit=${it.limit()}")
+        return buffer.duplicate().let {
             it.flip()
             val arr = ByteArray(it.limit())
             it.get(arr)
 
-            println("bytearray is: ")
-            arr.forEach {
-                println("  ${it}")
-            }
+            //val crc16 = CRC16()
+            //crc16.update(arr)
+            // crc16.value
+            8721.toUShort() // FIXME das ist nur ein Dummy-CRC, hier gehoeren die oberen Zeilen wieder einkommentiert
         }
-
-        // println("[1] position=${buffer.position()}, limit=${buffer.limit()}")
-
-        // val arr = ByteArray(auxBuffer.limit())
-        // println("[2] position=${buffer.position()}, limit=${buffer.limit()}")
-        // buffer.get(arr)
-        // println("[3] position=${buffer.position()}, limit=${buffer.limit()}")
-        // buffer.compact()
-        // println("[4] position=${buffer.position()}, limit=${buffer.limit()}")
-
-        // println("Number of bytes in arr for calculating CRC26: ${arr.size}")
-        // println("bytearray is: ")
-        // arr.forEach {
-        //     println("  ${it}")
-        // }
-
-        // determine CRC16
-        //val crc16 = CRC16()
-        //crc16.update(arr)
-        // return crc16.value
-        return 0x1122.toUShort() // FIXME testweise, damit ich nicht die CRC16-Funktionen hier auch noch brauche
     }
 
     /**
@@ -118,11 +96,16 @@ open class ConfigStructure {
         val buffer = ByteBuffer.allocate(256).order(ByteOrder.LITTLE_ENDIAN)
 
         packFields(buffer, fields)
+
+        // add CRC checksum at the end of the buffer
         val crc = calculateCrc16(buffer)
         buffer.putShort(crc.toShort())
-        
-        return ByteArray(buffer.position()).apply {
-            buffer.get(this)
+
+        return buffer.duplicate().let {
+            it.flip()
+            val arr = ByteArray(it.limit())
+            it.get(arr)
+            arr
         }
     }
 
@@ -132,9 +115,9 @@ open class ConfigStructure {
      * This version of unpack determines the structure version to be used for
      * unpacking by fetching the version info at the beginning of the buffer.
      * 
-     * @return false on CRC error, true on successful read and successful CRC check
+     * @throws Exception on CRC error
      */
-    open fun unpack(byteArray: ByteArray) : Boolean {
+    open fun unpack(byteArray: ByteArray) {
 
         val buffer = ByteBuffer.wrap(byteArray).order(ByteOrder.LITTLE_ENDIAN)
         
@@ -142,15 +125,15 @@ open class ConfigStructure {
         //val fields = getFields(version)
         val fields = listOf<DataField>() // FIXME noch nix drin, unimplemented yet
 
-        return unpack(buffer, fields)
+        unpack(buffer, fields)
     }
 
     /**
      * Deserialize a byte buffer into the structure values.
      * 
-     * @return false on CRC error, true on successful read and successful CRC check
+     * @throws Exception on CRC error
      */
-    fun unpack(buffer: ByteBuffer, fields: List<DataField>) : Boolean {
+    fun unpack(buffer: ByteBuffer, fields: List<DataField>) {
         unpackFields(buffer, fields)
 
         // get slice of buffer over which the CRC should be calculated (from position 0 to 
@@ -159,11 +142,15 @@ open class ConfigStructure {
             flip()
         }
         val crcCalculated = calculateCrc16(dataBuffer)
+        println("calculated CRC=${crcCalculated}")
 
         // read recorded CRC
         val crcRecorded = unpackCrc16(buffer)
+        println("recorded CRC=${crcRecorded}")
 
-        return (crcRecorded == crcCalculated)
+        if (crcRecorded != crcCalculated) {
+            throw Exception("checksum mismatch!")
+        }
     }
 
     /**
@@ -337,10 +324,12 @@ class ConfigPof (
 
     /**
      * For the time being, hardcode the configPof version to configPofV1
+     * 
+     * @throws Exception on CRC error
      */
-    override fun unpack(byteArray: ByteArray) : Boolean {
+    override fun unpack(byteArray: ByteArray) {
         val buffer = ByteBuffer.wrap(byteArray).order(ByteOrder.LITTLE_ENDIAN)
-        return super.unpack(buffer, configPofV1)
+        super.unpack(buffer, configPofV1)
     }
 
     /**
