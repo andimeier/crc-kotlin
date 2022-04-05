@@ -75,11 +75,32 @@ open class ConfigStructure {
      * @return the calculated CRC16 value
      */
     fun calculateCrc16(buffer: ByteBuffer): UShort {
-        buffer.flip()
+        buffer.duplicate().let {
+            println("[a1] position=${it.position()}, limit=${it.limit()}")
+            it.flip()
+            val arr = ByteArray(it.limit())
+            it.get(arr)
 
-        val arr = ByteArray(buffer.limit())
-        buffer.get(arr)
-        buffer.compact()
+            println("bytearray is: ")
+            arr.forEach {
+                println("  ${it}")
+            }
+        }
+
+        // println("[1] position=${buffer.position()}, limit=${buffer.limit()}")
+
+        // val arr = ByteArray(auxBuffer.limit())
+        // println("[2] position=${buffer.position()}, limit=${buffer.limit()}")
+        // buffer.get(arr)
+        // println("[3] position=${buffer.position()}, limit=${buffer.limit()}")
+        // buffer.compact()
+        // println("[4] position=${buffer.position()}, limit=${buffer.limit()}")
+
+        // println("Number of bytes in arr for calculating CRC26: ${arr.size}")
+        // println("bytearray is: ")
+        // arr.forEach {
+        //     println("  ${it}")
+        // }
 
         // determine CRC16
         //val crc16 = CRC16()
@@ -90,15 +111,19 @@ open class ConfigStructure {
 
     /**
      * Serialize the config structure.
+     * 
+     * @return the serialized structure, including the trailing CRC16 checksum
      */
-    open fun pack(fields: List<DataField>): ByteBuffer {
+    open fun pack(fields: List<DataField>): ByteArray {
         val buffer = ByteBuffer.allocate(256).order(ByteOrder.LITTLE_ENDIAN)
 
         packFields(buffer, fields)
         val crc = calculateCrc16(buffer)
         buffer.putShort(crc.toShort())
         
-        return buffer
+        return ByteArray(buffer.position()).apply {
+            buffer.get(this)
+        }
     }
 
     /**
@@ -321,7 +346,7 @@ class ConfigPof (
     /**
      * For the time being, hardcode the configPof version to configPofV1
      */
-    fun pack(): ByteBuffer { // TODO FIXME liefere ByteArray zurueck, dann sind wir vom externen Interface her konsistent (wie in unpack))
+    fun pack(): ByteArray {
         return super.pack(configPofV1)
     }
 
@@ -339,48 +364,20 @@ fun decodeConfig() {
         0x89U, 0xC8U, 0xA3U, 0x11U, 0x22U).toByteArray()
 
 
+    // deserialize: read from bytes into the config values
     val configPof = ConfigPof().apply {
         unpack(byteArray)
     }
 
 
-    val byteArray = configPof.pack().let {
-        val arr = ByteArray(it.position())
-        it.get(arr)
-        arr
+    // serialize: read from the config values into the serialized bytes
+    val byteArray2 = configPof.pack()
+
+    println("bytearray is: ")
+    byteArray2.forEach {
+        println("  ${it}")
     }
-
-    println("bytearray is: ${byteArray}")
-
-
-    // val buffer = ByteBuffer.wrap(byteArray).order(ByteOrder.LITTLE_ENDIAN)
-
-    // // determine CRC16
-    // val crc16 = CRC16()
-    // crc16.update(byteArray)
-
-
-
-    // // decode buffer
-
-    // // skip reserved field
-    // skip(buffer, 1)
-    // // buffer.get()
-
-    // val pofStructVersion = buffer.get().toUByte()
-
-    // // skip reserved field
-    // skip(buffer, 2)
-
-    // val hwNumber = buffer.getShort().toUShort()
-    // val cpuSerial = buffer.getInt().toULong()
-
-    // val wsnConfig = configPof(
-    // 	pofStructVersion,
-    //     hwNumber,
-    //     cpuSerial,
-    //     crc=crc16.value
-    // )
+    
     println(configPof)
 
     println("cpuSerial is: ${configPof.cpuSerial.value}")
