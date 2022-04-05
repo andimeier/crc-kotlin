@@ -45,7 +45,8 @@ open class ConfigStructure {
 
     /**
      * Unpack the given fields (in the given order and layout) from the
-     * passed ByteBuffer.
+     * passed ByteBuffer. The CRC will not be extracted and is expected
+     * to be the next bytes in the buffer.
      * 
      * @param buffer the byte buffer to be read from
      * @param fields the data field layout for parsing the fields
