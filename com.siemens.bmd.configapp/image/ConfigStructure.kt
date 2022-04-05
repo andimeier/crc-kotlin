@@ -24,6 +24,7 @@ data class Device(
  * * the first byte (UInt8) determines the structure version to be used for 
  *   packing/unpacking
  * * the last UInt16 is the CRC16 checksum
+ * * all data fields must be provided by the respective subclass
  */
 open class ConfigStructure {
     /**
@@ -57,19 +58,29 @@ open class ConfigStructure {
 
 
     /**
-     * Unpack the next bytes and interpret them as CRC value. Unpack the value
+     * Read the next bytes and interpret them as CRC value. Unpack the value
      * and return it.
      * 
      * @param buffer the byte buffer to be read from
      * @return the CRC16 value read from the byte buffer
      */
-    fun unpackCrc16(buffer: ByteBuffer): UShort {
+    fun readCrc16(buffer: ByteBuffer): UShort {
         return buffer.getShort().toUShort()
     }
 
     /**
+     * Write the CRC number to the buffer.
+     * 
+     * @param buffer the byte buffer to be written to (on the current position)
+     * @param crc the CRC16 value to be written to the byte buffer
+     */
+    fun writeCrc16(buffer: ByteBuffer, crc: UShort) {
+        buffer.putShort(crc.toShort())
+    }
+
+    /**
      * Calculate CRC16 over the given ByteBuffer content. The buffer will be 
-     * consumed.
+     * unchanged, since this function operates on a duplicate.
      * 
      * @param buffer the ByteBuffer over which the CRC16 will be calculated
      * @return the calculated CRC16 value
@@ -99,13 +110,42 @@ open class ConfigStructure {
 
         // add CRC checksum at the end of the buffer
         val crc = calculateCrc16(buffer)
-        buffer.putShort(crc.toShort())
+        writeCrc16(buffer, crc)
 
+        // return the ByteArray version of the data
         return buffer.duplicate().let {
             it.flip()
             val arr = ByteArray(it.limit())
             it.get(arr)
             arr
+        }
+    }
+
+    /**
+     * Deserialize a byte buffer into the structure values.
+     * 
+     * @throws Exception on CRC error
+     */
+    fun unpack(byteArray: ByteArray, fields: List<DataField>) {
+
+        val buffer = ByteBuffer.wrap(byteArray).order(ByteOrder.LITTLE_ENDIAN)
+
+        unpackFields(buffer, fields)
+
+        // get slice of buffer over which the CRC should be calculated (from position 0 to 
+        // current position)
+        val dataBuffer = buffer.duplicate().apply {
+            flip()
+        }
+        val crcCalculated = calculateCrc16(dataBuffer)
+        println("calculated CRC=${crcCalculated}")
+
+        // read recorded CRC
+        val crcRecorded = readCrc16(buffer)
+        println("recorded CRC=${crcRecorded}")
+
+        if (crcRecorded != crcCalculated) {
+            throw Exception("checksum mismatch!")
         }
     }
 
@@ -125,32 +165,7 @@ open class ConfigStructure {
         //val fields = getFields(version)
         val fields = listOf<DataField>() // FIXME noch nix drin, unimplemented yet
 
-        unpack(buffer, fields)
-    }
-
-    /**
-     * Deserialize a byte buffer into the structure values.
-     * 
-     * @throws Exception on CRC error
-     */
-    fun unpack(buffer: ByteBuffer, fields: List<DataField>) {
-        unpackFields(buffer, fields)
-
-        // get slice of buffer over which the CRC should be calculated (from position 0 to 
-        // current position)
-        val dataBuffer = buffer.duplicate().apply {
-            flip()
-        }
-        val crcCalculated = calculateCrc16(dataBuffer)
-        println("calculated CRC=${crcCalculated}")
-
-        // read recorded CRC
-        val crcRecorded = unpackCrc16(buffer)
-        println("recorded CRC=${crcRecorded}")
-
-        if (crcRecorded != crcCalculated) {
-            throw Exception("checksum mismatch!")
-        }
+        unpack(byteArray, fields)
     }
 
     /**
@@ -295,10 +310,10 @@ class ConfigPof (
     // noch nicht kennt, sollten die ja null sein, oder? Damit das UI das 
     // visualisieren kann. Oder gibt es immer DefaultValues (so wie hier aktuell
     // implementiert)?
-    var pofStructVersion: UInt8 = UInt8("pofStructVersion"),
-    var hwNumber: UInt16 = UInt16("hwNumber"),
-    var cpuSerial: UInt32 = UInt32("cpuSerial"),
-    var crc: UInt16 = UInt16("crc"),
+    val pofStructVersion: UInt8 = UInt8("pofStructVersion"),
+    val hwNumber: UInt16 = UInt16("hwNumber"),
+    val cpuSerial: UInt32 = UInt32("cpuSerial"),
+    val crc: UInt16 = UInt16("crc"),
 
 
     // note that the trailing CRC16 will be added implicitly and must NOT be
@@ -328,8 +343,7 @@ class ConfigPof (
      * @throws Exception on CRC error
      */
     override fun unpack(byteArray: ByteArray) {
-        val buffer = ByteBuffer.wrap(byteArray).order(ByteOrder.LITTLE_ENDIAN)
-        super.unpack(buffer, configPofV1)
+        super.unpack(byteArray, configPofV1)
     }
 
     /**
@@ -358,14 +372,18 @@ fun decodeConfig() {
         unpack(byteArray)
     }
 
+    // manipulate data
+    configPof.hwNumber.value = 0x0103U
 
     // serialize: read from the config values into the serialized bytes
     val byteArray2 = configPof.pack()
 
-    println("bytearray is: ")
+    println("bytearray of newly packed configPof is: ")
     byteArray2.forEach {
-        println("  ${it}")
+        val b = it.toUByte()
+        print("  ${b}")
     }
+    println()
     
     println(configPof)
 
