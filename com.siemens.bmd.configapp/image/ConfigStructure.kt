@@ -1,19 +1,14 @@
-package com.siemens.bmd.configapp.image
+package com.siemens.bmd.configapp
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import com.quickbirdstudios.CRC16
 
-/**
- * Object representing the config data of one device (e.g. one wireless sensor device)
+/*
+ FIXME since "structure version" Byte at the beginning of the struct is mandatory, should we exclude
+ it from being modifiable? I.e., remove it from the "field list" and treat it like the CRC field
+ implicitly? Otherwise it might be possible that a use misconfigures the field list, so that the
+ version field is not the first byte - which would lead to strange effects
  */
-data class Device(
-    val pof: configPof,
-
-    // time when this config data has been read from the device,
-    // thus representing the "up-to-date-ness" of the data
-    var timestamp: DateTime, 
-)
 
 /**
  * Base class for config structures.
@@ -132,7 +127,10 @@ abstract class ConfigStructure(var version: Int = 1) {
             throw Exception("unable to pack structure because structure version $version is unknown")  // FIXME wie soll ich mit einem solchen Fehler umgehen? Was soll passieren?
         }
 
-        return pack(fields)
+        return pack(fields).apply {
+            // ensure that the version byte (first byte) reflects the actual version written
+            set(0, version.toByte())
+        }
     }
 
     /**
@@ -413,7 +411,7 @@ class ConfigPof (
  */
 @OptIn(ExperimentalUnsignedTypes::class)
 fun decodeConfig() {
-    val byteArray: ByteArray = ubyteArrayOf(0x01U, 0x00U, 0xA1U, 0xccU, 0x00U, 0x00U, 0x2EU, 0x38U, 0xD4U,
+    val byteArray: ByteArray = ubyteArrayOf(0x02U, 0x00U, 0xA1U, 0xccU, 0x00U, 0x00U, 0x2EU, 0x38U, 0xD4U,
         0x89U, 0x11U, 0x22U).toByteArray()
 
     printByteArray("initial data: : ", byteArray)
@@ -425,6 +423,8 @@ fun decodeConfig() {
 
     // manipulate data
     configPof.hwNumber.value = 0x0103U
+
+    configPof.version = 1
 
     // serialize: read from the config values into the serialized bytes
     val byteArray2 = configPof.pack()
