@@ -157,7 +157,7 @@ abstract class ConfigStructure(var version: Int = 1) {
      *
      * @return the serialized structure, including the trailing CRC16 checksum
      */
-    open fun pack(): ByteArray {
+    fun pack(): ByteArray {
 
         println("for packing, use version $version")
         val fields: List<DataField>? = getDataFields(version)
@@ -178,7 +178,7 @@ abstract class ConfigStructure(var version: Int = 1) {
      *
      * @return the serialized structure, including the trailing CRC16 checksum
      */
-    open fun pack(fields: List<DataField>): ByteArray {
+    private fun pack(fields: List<DataField>): ByteArray {
         val buffer = ByteBuffer.allocate(256).order(ByteOrder.LITTLE_ENDIAN)
 
         packFields(buffer, fields)
@@ -196,6 +196,32 @@ abstract class ConfigStructure(var version: Int = 1) {
         }
     }
 
+    /**
+     * Deserialize a byte buffer into the structure values.
+     *
+     * This version of unpack determines the structure version to be used for
+     * unpacking by fetching the version info at the beginning of the buffer.
+     *
+     * @throws Exception on CRC error
+     */
+    fun unpack(byteArray: ByteArray) {
+
+        val version = getVersion(byteArray)
+        println("from the data, determined version=$version")
+        //val fields = getFields(version)
+
+        val fields: List<DataField>? = getDataFields(version)
+        if (fields == null) {
+            println("unable to unpack structure because structure version $version is unknown")
+            return // FIXME wie soll ich mit einem solchen Fehler umgehen? Was soll passieren?
+        }
+
+        unpack(byteArray, fields)
+
+        // remember the read version and set it as default for a later packing
+        // (i.e., by default, leave the version "as is")
+        this.version = version
+    }
 
     /**
      * Deserialize a byte buffer into the structure values.
@@ -224,49 +250,6 @@ abstract class ConfigStructure(var version: Int = 1) {
             throw Exception("checksum mismatch!")
         }
     }
-
-
-    /**
-     * Deserialize a byte buffer into the structure values.
-     *
-     * This version of unpack determines the structure version to be used for
-     * unpacking by fetching the version info at the beginning of the buffer.
-     *
-     * @throws Exception on CRC error
-     */
-    open fun unpack(byteArray: ByteArray) {
-
-        val version = getVersion(byteArray)
-        println("from the data, determined version=$version")
-        //val fields = getFields(version)
-
-        val fields: List<DataField>? = getDataFields(version)
-        if (fields == null) {
-            println("unable to unpack structure because structure version $version is unknown")
-            return // FIXME wie soll ich mit einem solchen Fehler umgehen? Was soll passieren?
-        }
-
-        unpack(byteArray, fields)
-
-        // remember the read version and set it as default for a later packing
-        // (i.e., by default, leave the version "as is")
-        this.version = version
-    }
-
-    // /**
-    //  * Detect structure version by reading the first byte of the binary values.
-    //  *
-    //  * The buffer position will not advance.
-    //  *
-    //  * @param buffer the ByteBuffer containing the version byte at the current
-    //  *   buffer position
-    //  */
-    // fun getVersion(buffer: ByteBuffer) : Int {
-    //     val position = buffer.position()
-    //     val version: Int = buffer.get().toInt()
-    //     buffer.position(position) // reset position to where it was before
-    //     return version
-    // }
 }
 
 /**
