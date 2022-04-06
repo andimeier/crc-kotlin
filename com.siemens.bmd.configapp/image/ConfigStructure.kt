@@ -26,7 +26,7 @@ data class Device(
  * * the last UInt16 is the CRC16 checksum
  * * all data fields must be provided by the respective subclass
  */
-abstract class ConfigStructure {
+abstract class ConfigStructure(public val version: Int = 1) {
 
     /**
      * Given the structure version, determine the appropriate field list.
@@ -112,6 +112,32 @@ abstract class ConfigStructure {
     /**
      * Serialize the config structure.
      * 
+     * The structure version used is taken from this class' "version" property. This is
+     * set on unpacking or explicitly (thereafter). So, by default, packing will use the 
+     * same version as the former unpacking, so the config can be manipulated and written
+     * back using the same version. 
+     * 
+     * However, if you would like to "upgrade" the config structure, it is possible to
+     * explicitly set the version to a different value (after unpacking), so the new
+     * version is used for packing (writing).
+     * 
+     * @return the serialized structure, including the trailing CRC16 checksum
+     */
+    open fun pack(): ByteArray {
+
+        println("for packing, use version ${version}")
+        val fields: List<DataField>? = getDataFields(version)
+        if (fields == null) {
+            println("unable to pack structure because structure version ${version} is unknown")
+            throw Exception("unable to pack structure because structure version ${version} is unknown")  // FIXME wie soll ich mit einem solchen Fehler umgehen? Was soll passieren?
+        }
+
+        return pack(fields)
+    }
+
+    /**
+     * Serialize the config structure.
+     * 
      * @return the serialized structure, including the trailing CRC16 checksum
      */
     open fun pack(fields: List<DataField>): ByteArray {
@@ -181,22 +207,26 @@ abstract class ConfigStructure {
         }
 
         unpack(byteArray, fields)
+
+        // remember the read version and set it as default for a later packing 
+        // (i.e., by default, leave the version "as is")
+        setVersion(version)
     }
 
-    /**
-     * Detect structure version by reading the first byte of the binary values.
-     * 
-     * The buffer position will not advance.
-     * 
-     * @param buffer the ByteBuffer containing the version byte at the current 
-     *   buffer position
-     */
-    fun getVersion(buffer: ByteBuffer) : Int {
-        val position = buffer.position()
-        val version: Int = buffer.get().toInt()
-        buffer.position(position) // reset position to where it was before
-        return version
-    }
+    // /**
+    //  * Detect structure version by reading the first byte of the binary values.
+    //  * 
+    //  * The buffer position will not advance.
+    //  * 
+    //  * @param buffer the ByteBuffer containing the version byte at the current 
+    //  *   buffer position
+    //  */
+    // fun getVersion(buffer: ByteBuffer) : Int {
+    //     val position = buffer.position()
+    //     val version: Int = buffer.get().toInt()
+    //     buffer.position(position) // reset position to where it was before
+    //     return version
+    // }
 
     /**
      * Detect structure version by reading the first byte of the binary values.
@@ -379,7 +409,8 @@ class ConfigPof (
      * For the time being, hardcode the configPof version to configPofV1
      */
     fun pack(): ByteArray {
-        return super.pack(configPofV1)
+        // return super.pack(configPofV1)
+        return super.pack()
     }
 
     override fun toString(): String {
