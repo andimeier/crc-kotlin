@@ -12,6 +12,7 @@ import java.nio.ByteOrder
 
 /**
  * Base class for config structures.
+ *
  * Includes packing/unpacking of fields. The last bytes of the data structure is
  * always assumed to be a CRC16 checksum. This will be checked/written automatically.
  *
@@ -22,15 +23,28 @@ import java.nio.ByteOrder
  * * all data fields must be provided by the respective subclass
  */
 abstract class ConfigStructure(var version: Int = 1) {
+    private val sizeOfCrc16 = UShort.SIZE_BYTES
+
+    /**
+     * Based on the first couple of bytes, determine the version and then determine
+     * the size of the config structure in this version.
+     */
+    fun getSize(byteArray: ByteArray): Int {
+        val dataFields = getDataFields(version) ?: throw Exception("unknown version of $version, cannot determine size of structure version")
+
+        // to the aggregated size of the fields, add the bytes needed for the CRC16
+        return dataFields.sumOf { it.size } + sizeOfCrc16
+    }
 
     /**
      * Given the structure version, determine the appropriate field list.
      *
      * @param version the structure version
      * @return the structure "layout", i.e. the list of data fields, ready
-     *   to be used at packing or unpacking
+     *   to be used at packing or unpacking - or null if the specified version is unknown
      */
     abstract fun getDataFields(version: Int): List<DataField>?
+
 
     /**
      * Pack the given fields (in the given order and layout) into the
@@ -47,6 +61,7 @@ abstract class ConfigStructure(var version: Int = 1) {
             it.writeTo(buffer)
         }
     }
+
 
     /**
      * Unpack the given fields (in the given order and layout) from the
@@ -74,6 +89,7 @@ abstract class ConfigStructure(var version: Int = 1) {
         return buffer.short.toUShort()
     }
 
+
     /**
      * Write the CRC number to the buffer.
      *
@@ -83,6 +99,7 @@ abstract class ConfigStructure(var version: Int = 1) {
     private fun writeCrc16(buffer: ByteBuffer, crc: UShort) {
         buffer.putShort(crc.toShort())
     }
+
 
     /**
      * Calculate CRC16 over the given ByteBuffer content. The buffer will be
@@ -103,6 +120,7 @@ abstract class ConfigStructure(var version: Int = 1) {
             8721.toUShort() // FIXME das ist nur ein Dummy-CRC, hier gehoeren die oberen Zeilen wieder einkommentiert
         }
     }
+
 
     /**
      * Serialize the config structure.
@@ -133,6 +151,7 @@ abstract class ConfigStructure(var version: Int = 1) {
         }
     }
 
+
     /**
      * Serialize the config structure.
      *
@@ -155,6 +174,7 @@ abstract class ConfigStructure(var version: Int = 1) {
             arr
         }
     }
+
 
     /**
      * Deserialize a byte buffer into the structure values.
@@ -183,6 +203,7 @@ abstract class ConfigStructure(var version: Int = 1) {
             throw Exception("checksum mismatch!")
         }
     }
+
 
     /**
      * Deserialize a byte buffer into the structure values.
@@ -231,10 +252,14 @@ abstract class ConfigStructure(var version: Int = 1) {
      *
      * The buffer position will not advance.
      *
+     * Can be called from "outside" to first nail down the config structure (and the
+     * number of bytes which must be read) and then read the remaining bytes, then
+     * let this class decode the entire content.
+     *
      * @param byteArray the ByteBuffer containing the version byte at the current
      *   buffer position
      */
-    private fun getVersion(byteArray: ByteArray) : Int {
+    fun getVersion(byteArray: ByteArray): Int {
         return byteArray[0].toInt()
     }
 }
@@ -246,6 +271,11 @@ abstract class ConfigStructure(var version: Int = 1) {
  * to/from a given ByteBuffer.
  */
 interface DataField {
+
+    /**
+     * The size of the data field in bytes.
+     */
+    val size: Int
 
     /**
      * The name of this data field, used for output/logging.
@@ -267,7 +297,7 @@ interface DataField {
 /**
  * Class representing a UInt8 data field.
  */
-class UInt8(override val name: String) : DataField {
+class UInt8(override val name: String, override val size: Int = 1) : DataField {
     var value: UByte? = null
 
     override fun writeTo(buffer: ByteBuffer) {
@@ -285,7 +315,7 @@ class UInt8(override val name: String) : DataField {
 /**
  * Class representing a UInt16 data field.
  */
-class UInt16(override val name: String) : DataField {
+class UInt16(override val name: String, override val size: Int = 2) : DataField {
     var value: UShort? = null
 
     override fun writeTo(buffer: ByteBuffer) {
@@ -303,7 +333,7 @@ class UInt16(override val name: String) : DataField {
 /**
  * Class representing a UInt32 data field.
  */
-class UInt32(override val name: String) : DataField {
+class UInt32(override val name: String, override val size: Int = 4) : DataField {
     var value: UInt? = null
 
     override fun writeTo(buffer: ByteBuffer) {
@@ -321,7 +351,7 @@ class UInt32(override val name: String) : DataField {
 /**
  * Class representing a UInt64 data field.
  */
-class UInt64(override val name: String) : DataField {
+class UInt64(override val name: String, override val size: Int = 8) : DataField {
     var value: ULong? = null
 
     override fun writeTo(buffer: ByteBuffer) {
@@ -343,7 +373,7 @@ class UInt64(override val name: String) : DataField {
  * read bytes will be dismissed (ignored), except for contributing
  * to the checksum.
  */
-class NullBytes(override val name: String, private val size: Int) : DataField {
+class NullBytes(override val name: String, override val size: Int) : DataField {
 
     override fun writeTo(buffer: ByteBuffer) {
         val arr = ByteArray(size) { 0x00 }
@@ -359,7 +389,7 @@ class NullBytes(override val name: String, private val size: Int) : DataField {
 /**
  * The POF config structure of a wireless sensor node
  */
-class ConfigPof (
+class ConfigPof(
 
     // FIXME Nulls erlauben? Falls zB eine Version der ConfigStruct bestimmte Felder
     // noch nicht kennt, sollten die ja null sein, oder? Damit das UI das
@@ -397,7 +427,7 @@ class ConfigPof (
     }
 
     override fun getDataFields(version: Int): List<DataField>? {
-        return when(version) {
+        return when (version) {
             1 -> configPofV1
             2 -> configPofV2
             else -> null
@@ -411,10 +441,15 @@ class ConfigPof (
  */
 @OptIn(ExperimentalUnsignedTypes::class)
 fun decodeConfig() {
-    val byteArray: ByteArray = ubyteArrayOf(0x02U, 0x00U, 0xA1U, 0xccU, 0x00U, 0x00U, 0x2EU, 0x38U, 0xD4U,
-        0x89U, 0x11U, 0x22U).toByteArray()
+    val byteArray: ByteArray = ubyteArrayOf(
+        0x01U, 0x00U, 0xA1U, 0xccU, 0x00U, 0x00U, 0x2EU, 0x38U, 0xD4U, 0x89U, 0x11U, 0x22U
+    ).toByteArray()
 
     printByteArray("initial data: : ", byteArray)
+
+    val size = ConfigPof().getSize(byteArray)
+    val version = ConfigPof().getVersion(byteArray)
+    println("determined size of configPof in version [$version] is: $size bytes")
 
     // deserialize: read from bytes into the config values
     val configPof = ConfigPof().apply {
@@ -424,7 +459,8 @@ fun decodeConfig() {
     // manipulate data
     configPof.hwNumber.value = 0x0103U
 
-    configPof.version = 1
+    // write using another structure version
+    configPof.version = 2
 
     // serialize: read from the config values into the serialized bytes
     val byteArray2 = configPof.pack()
@@ -432,6 +468,8 @@ fun decodeConfig() {
     printByteArray("bytearray of newly packed configPof is: ", byteArray2)
 
     println(configPof)
+//    print("configPof: hwNumber=%04x".format(configPof.hwNumber.value.toInt()))
+    print("configPof: hwNumber=%04x".format(65520))
 
     println("cpuSerial is: ${configPof.cpuSerial.value}")
 }
