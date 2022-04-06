@@ -26,7 +26,17 @@ data class Device(
  * * the last UInt16 is the CRC16 checksum
  * * all data fields must be provided by the respective subclass
  */
-open class ConfigStructure {
+abstract class ConfigStructure {
+
+    /**
+     * Given the structure version, determine the appropriate field list.
+     * 
+     * @param version the structure version
+     * @return the structure "layout", i.e. the list of data fields, ready
+     *   to be used at packing or unpacking
+     */
+    abstract fun getDataFields(version: Int): List<DataField>?
+
     /**
      * Pack the given fields (in the given order and layout) into the
      * passed ByteBuffer.
@@ -160,11 +170,15 @@ open class ConfigStructure {
      */
     open fun unpack(byteArray: ByteArray) {
 
-        val buffer = ByteBuffer.wrap(byteArray).order(ByteOrder.LITTLE_ENDIAN)
-        
-        val version = getVersion(buffer)
+        val version = getVersion(byteArray)
+        println("from the data, determined version=${version}")
         //val fields = getFields(version)
-        val fields = listOf<DataField>() // FIXME noch nix drin, unimplemented yet
+        
+        val fields: List<DataField>? = getDataFields(version)
+        if (fields == null) {
+            println("unable to unpack structure because structure version ${version} is unknown")
+            return // FIXME wie soll ich mit einem solchen Fehler umgehen? Was soll passieren?
+        }
 
         unpack(byteArray, fields)
     }
@@ -181,6 +195,19 @@ open class ConfigStructure {
         val position = buffer.position()
         val version: Int = buffer.get().toInt()
         buffer.position(position) // reset position to where it was before
+        return version
+    }
+
+    /**
+     * Detect structure version by reading the first byte of the binary values.
+     * 
+     * The buffer position will not advance.
+     * 
+     * @param buffer the ByteBuffer containing the version byte at the current 
+     *   buffer position
+     */
+    fun getVersion(byteArray: ByteArray) : Int {
+        val version: Int = byteArray[0].toInt()
         return version
     }
 }
@@ -344,7 +371,8 @@ class ConfigPof (
      * @throws Exception on CRC error
      */
     override fun unpack(byteArray: ByteArray) {
-        super.unpack(byteArray, configPofV1)
+        //super.unpack(byteArray, configPofV1)
+        super.unpack(byteArray)
     }
 
     /**
@@ -357,6 +385,14 @@ class ConfigPof (
     override fun toString(): String {
         return "pofStructVersion=${pofStructVersion.value}, hwNumber=${hwNumber.value}, cpuSerial=${cpuSerial.value}"
     }
+
+    override fun getDataFields(version: Int): List<DataField>? {
+        return when(version) {
+            1 -> configPofV1
+            2 -> configPofV2
+            else -> null
+        }
+    }
 }
 
 
@@ -364,7 +400,7 @@ class ConfigPof (
  * Example for decoding a byte stream into a config object.
  */
 fun decodeConfig() {
-    val byteArray: ByteArray = ubyteArrayOf(0x00U, 0xA1U, 0x00U, 0x00U, 0x2EU, 0x38U, 0xD4U, 
+    val byteArray: ByteArray = ubyteArrayOf(0x01U, 0xA1U, 0x00U, 0x00U, 0x2EU, 0x38U, 0xD4U, 
         0x89U, 0xC8U, 0xA3U, 0x11U, 0x22U).toByteArray()
 
 
