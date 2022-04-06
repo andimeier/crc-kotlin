@@ -28,13 +28,11 @@ abstract class ConfigStructure(var version: Int = 1) {
     /**
      * Detect structure version by reading the first byte of the binary values.
      *
-     * The buffer position will not advance.
-     *
      * Can be called from "outside" to first nail down the config structure (and the
      * number of bytes which must be read) and then read the remaining bytes, then
      * let this class decode the entire content.
      *
-     * @param byteArray the ByteBuffer containing the version byte at the current
+     * @param byteArray the binary data containing the version byte at the current
      *   buffer position
      */
     fun getVersion(byteArray: ByteArray): Int {
@@ -42,16 +40,16 @@ abstract class ConfigStructure(var version: Int = 1) {
     }
 
     /**
-     * Based on the first couple of bytes, determine the version and then determine
-     * the size of the config structure in this version.
+     * Determine the size of the config structure in the given version.
      *
      * @param version the structure version
      * @return the number of bytes needed for the structure in the specified version
      */
     fun getSize(version: Int): Int {
 
-        val dataFields = getDataFields(version) ?: throw Exception("unknown version of $version, " +
-                "cannot determine size of structure version")
+        val dataFields = getDataFields(version) ?: throw Exception(
+            "unknown version of $version, " + "cannot determine size of structure version"
+        )
 
         // to the aggregated size of the fields, add the bytes needed for the CRC16
         return dataFields.sumOf { it.size } + sizeOfCrc16
@@ -65,82 +63,6 @@ abstract class ConfigStructure(var version: Int = 1) {
      *   to be used for packing or unpacking - or null if the specified version is unknown
      */
     abstract fun getDataFields(version: Int): List<DataField>?
-
-
-    /**
-     * Pack the given fields (in the given order and layout) into the
-     * passed ByteBuffer.
-     *
-     * Only the fields will be stuffed into the ByteBuffer, no CRC will
-     * be added.
-     *
-     * @param buffer the byte buffer to be written to
-     * @param fields the data field layout
-     */
-    private fun packFields(buffer: ByteBuffer, fields: List<DataField>) {
-        fields.forEach {
-            it.writeTo(buffer)
-        }
-    }
-
-
-    /**
-     * Unpack the given fields (in the given order and layout) from the
-     * passed ByteBuffer. The CRC will not be extracted and is expected
-     * to be the next bytes in the buffer.
-     *
-     * @param buffer the byte buffer to be read from
-     * @param fields the data field layout for parsing the fields
-     */
-    private fun unpackFields(buffer: ByteBuffer, fields: List<DataField>) {
-        fields.forEach {
-            it.getFrom(buffer)
-        }
-    }
-
-
-    /**
-     * Read the next bytes and interpret them as CRC value. Unpack the value
-     * and return it.
-     *
-     * @param buffer the byte buffer to be read from
-     * @return the CRC16 value read from the byte buffer
-     */
-    private fun readCrc16(buffer: ByteBuffer): UShort {
-        return buffer.short.toUShort()
-    }
-
-
-    /**
-     * Write the CRC number to the buffer.
-     *
-     * @param buffer the byte buffer to be written to (on the current position)
-     * @param crc the CRC16 value to be written to the byte buffer
-     */
-    private fun writeCrc16(buffer: ByteBuffer, crc: UShort) {
-        buffer.putShort(crc.toShort())
-    }
-
-
-    /**
-     * Calculate CRC16 over the given ByteBuffer content. The buffer will be
-     * unchanged, since this function operates on a duplicate.
-     *
-     * @param buffer the ByteBuffer over which the CRC16 will be calculated
-     * @return the calculated CRC16 value
-     */
-    private fun calculateCrc16(buffer: ByteBuffer): UShort {
-        return buffer.duplicate().let {
-            it.flip()
-            val arr = ByteArray(it.limit())
-            it.get(arr)
-
-            //val crc16 = CRC16()
-            //crc16.update(arr)
-            // crc16.value
-            8721.toUShort() // FIXME das ist nur ein Dummy-CRC, hier gehoeren die oberen Zeilen wieder einkommentiert
-        }
-    }
 
 
     /**
@@ -248,6 +170,80 @@ abstract class ConfigStructure(var version: Int = 1) {
 
         if (crcRecorded != crcCalculated) {
             throw Exception("checksum mismatch!")
+        }
+    }
+
+    /**
+     * Pack the given fields (in the given order and layout) into the
+     * passed ByteBuffer.
+     *
+     * Only the fields will be stuffed into the ByteBuffer, no CRC will
+     * be added.
+     *
+     * @param buffer the byte buffer to be written to
+     * @param fields the data field layout
+     */
+    private fun packFields(buffer: ByteBuffer, fields: List<DataField>) {
+        fields.forEach {
+            it.writeTo(buffer)
+        }
+    }
+
+
+    /**
+     * Unpack the given fields (in the given order and layout) from the
+     * passed ByteBuffer. The CRC will not be extracted and is expected
+     * to be the next bytes in the buffer.
+     *
+     * @param buffer the byte buffer to be read from
+     * @param fields the data field layout for parsing the fields
+     */
+    private fun unpackFields(buffer: ByteBuffer, fields: List<DataField>) {
+        fields.forEach {
+            it.getFrom(buffer)
+        }
+    }
+
+    /**
+     * Read the next bytes and interpret them as CRC value. Unpack the value
+     * and return it.
+     *
+     * @param buffer the byte buffer to be read from
+     * @return the CRC16 value read from the byte buffer
+     */
+    private fun readCrc16(buffer: ByteBuffer): UShort {
+        return buffer.short.toUShort()
+    }
+
+
+    /**
+     * Write the CRC number to the buffer.
+     *
+     * @param buffer the byte buffer to be written to (on the current position)
+     * @param crc the CRC16 value to be written to the byte buffer
+     */
+    private fun writeCrc16(buffer: ByteBuffer, crc: UShort) {
+        buffer.putShort(crc.toShort())
+    }
+
+
+    /**
+     * Calculate CRC16 over the given ByteBuffer content. The buffer will be
+     * unchanged, since this function operates on a duplicate.
+     *
+     * @param buffer the ByteBuffer over which the CRC16 will be calculated
+     * @return the calculated CRC16 value
+     */
+    private fun calculateCrc16(buffer: ByteBuffer): UShort {
+        return buffer.duplicate().let {
+            it.flip()
+            val arr = ByteArray(it.limit())
+            it.get(arr)
+
+            //val crc16 = CRC16()
+            //crc16.update(arr)
+            // crc16.value
+            8721.toUShort() // FIXME das ist nur ein Dummy-CRC, hier gehoeren die oberen Zeilen wieder einkommentiert
         }
     }
 }
