@@ -26,11 +26,32 @@ abstract class ConfigStructure(var version: Int = 1) {
     private val sizeOfCrc16 = UShort.SIZE_BYTES
 
     /**
+     * Detect structure version by reading the first byte of the binary values.
+     *
+     * The buffer position will not advance.
+     *
+     * Can be called from "outside" to first nail down the config structure (and the
+     * number of bytes which must be read) and then read the remaining bytes, then
+     * let this class decode the entire content.
+     *
+     * @param byteArray the ByteBuffer containing the version byte at the current
+     *   buffer position
+     */
+    fun getVersion(byteArray: ByteArray): Int {
+        return byteArray[0].toInt()
+    }
+
+    /**
      * Based on the first couple of bytes, determine the version and then determine
      * the size of the config structure in this version.
+     *
+     * @param version the structure version
+     * @return the number of bytes needed for the structure in the specified version
      */
-    fun getSize(byteArray: ByteArray): Int {
-        val dataFields = getDataFields(version) ?: throw Exception("unknown version of $version, cannot determine size of structure version")
+    fun getSize(version: Int): Int {
+
+        val dataFields = getDataFields(version) ?: throw Exception("unknown version of $version, " +
+                "cannot determine size of structure version")
 
         // to the aggregated size of the fields, add the bytes needed for the CRC16
         return dataFields.sumOf { it.size } + sizeOfCrc16
@@ -41,7 +62,7 @@ abstract class ConfigStructure(var version: Int = 1) {
      *
      * @param version the structure version
      * @return the structure "layout", i.e. the list of data fields, ready
-     *   to be used at packing or unpacking - or null if the specified version is unknown
+     *   to be used for packing or unpacking - or null if the specified version is unknown
      */
     abstract fun getDataFields(version: Int): List<DataField>?
 
@@ -246,22 +267,6 @@ abstract class ConfigStructure(var version: Int = 1) {
     //     buffer.position(position) // reset position to where it was before
     //     return version
     // }
-
-    /**
-     * Detect structure version by reading the first byte of the binary values.
-     *
-     * The buffer position will not advance.
-     *
-     * Can be called from "outside" to first nail down the config structure (and the
-     * number of bytes which must be read) and then read the remaining bytes, then
-     * let this class decode the entire content.
-     *
-     * @param byteArray the ByteBuffer containing the version byte at the current
-     *   buffer position
-     */
-    fun getVersion(byteArray: ByteArray): Int {
-        return byteArray[0].toInt()
-    }
 }
 
 /**
@@ -447,14 +452,16 @@ fun decodeConfig() {
 
     printByteArray("initial data: : ", byteArray)
 
-    val size = ConfigPof().getSize(byteArray)
-    val version = ConfigPof().getVersion(byteArray)
+    val configPof = ConfigPof()
+
+    // determine the struct version according to the data bytes (according to the FIRST byte of the data)
+    val version = configPof.getVersion(byteArray)
+
+    val size = configPof.getSize(version)
     println("determined size of configPof in version [$version] is: $size bytes")
 
     // deserialize: read from bytes into the config values
-    val configPof = ConfigPof().apply {
-        unpack(byteArray)
-    }
+    configPof.unpack(byteArray)
 
     // manipulate data
     configPof.hwNumber.value = 0x0103U
@@ -474,6 +481,9 @@ fun decodeConfig() {
     println("cpuSerial is: ${configPof.cpuSerial.value}")
 }
 
+/**
+ * Helper function which prints the bytes of a byte array on stdout.
+ */
 fun printByteArray(comment: String, byteArray: ByteArray) {
     println(comment)
     byteArray.forEach {
