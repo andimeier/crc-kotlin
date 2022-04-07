@@ -21,29 +21,28 @@ import java.nio.ByteOrder
  *   packing/unpacking
  * * the last UInt16 is the CRC16 checksum
  * * all data fields must be provided by the respective subclass
+ *
+ * The property [version] determines the structure version to be used for all future pack operations.
+ * It is set to the version of the read data while unpacking automatically, but may be changed afterwards,
+ * if you would like to pack the config with a different version. A use case for this is if a config structure
+ * should be migrated to a higher version (e.g. when a new firmware is used).
  */
 abstract class ConfigStructure(var version: Int = 1) {
     private val sizeOfCrc16 = UShort.SIZE_BYTES
 
     /**
-     * Detect structure version by reading the first byte of the binary values.
+     * Detect structure version by reading the first byte of the [byteArray].
      *
      * Can be called from "outside" to first nail down the config structure (and the
      * number of bytes which must be read) and then read the remaining bytes, then
      * let this class decode the entire content.
-     *
-     * @param byteArray the binary data containing the version byte at the current
-     *   buffer position
      */
     fun getVersion(byteArray: ByteArray): Int {
         return byteArray[0].toInt()
     }
 
     /**
-     * Determine the size of the config structure in the given version.
-     *
-     * @param version the structure version
-     * @return the number of bytes needed for the structure in the specified version
+     * Return the size of the config structure in the given [version] in bytes.
      */
     fun getSize(version: Int): Int {
 
@@ -56,17 +55,16 @@ abstract class ConfigStructure(var version: Int = 1) {
     }
 
     /**
-     * Given the structure version, determine the appropriate field list.
-     *
-     * @param version the structure version
-     * @return the structure "layout", i.e. the list of data fields, ready
-     *   to be used for packing or unpacking - or null if the specified version is unknown
+     * Given the structure [version], determine the appropriate field list.
+     * Return the structure "layout", i.e. the list of data fields, ready
+     * to be used for packing or unpacking - or null if the specified [version] is unknown
      */
     abstract fun getDataFields(version: Int): List<DataField>?
 
 
     /**
-     * Serialize the config structure.
+     * Return a serialized version of the config structure. The trailing CRC16 checksum
+     * is also included.
      *
      * The structure version used is taken from this class' "version" property. This is
      * set on unpacking or explicitly (thereafter). So, by default, packing will use the
@@ -76,8 +74,6 @@ abstract class ConfigStructure(var version: Int = 1) {
      * However, if you would like to "upgrade" the config structure, it is possible to
      * explicitly set the version to a different value (after unpacking), so the new
      * version is used for packing (writing).
-     *
-     * @return the serialized structure, including the trailing CRC16 checksum
      */
     fun pack(): ByteArray {
 
@@ -96,9 +92,8 @@ abstract class ConfigStructure(var version: Int = 1) {
 
 
     /**
-     * Serialize the config structure.
-     *
-     * @return the serialized structure, including the trailing CRC16 checksum
+     * Return the serialized config structure, including the trailing CRC16 checksum.
+     * The parameter [fields] describes the layout used for serialization.
      */
     private fun pack(fields: List<DataField>): ByteArray {
         val buffer = ByteBuffer.allocate(256).order(ByteOrder.LITTLE_ENDIAN)
@@ -119,12 +114,12 @@ abstract class ConfigStructure(var version: Int = 1) {
     }
 
     /**
-     * Deserialize a byte buffer into the structure values.
+     * Deserialize the [byteArray] into the structure values.
      *
      * This version of unpack determines the structure version to be used for
      * unpacking by fetching the version info at the beginning of the buffer.
      *
-     * @throws Exception on CRC error
+     * On CRC error while reading, an Exception is thrown.
      */
     fun unpack(byteArray: ByteArray) {
 
@@ -146,9 +141,8 @@ abstract class ConfigStructure(var version: Int = 1) {
     }
 
     /**
-     * Deserialize a byte buffer into the structure values.
-     *
-     * @throws Exception on CRC error
+     * Deserialize the [byteArray] into the structure values, using the field list in [fields].
+     * Throws an exception on CRC error.
      */
     private fun unpack(byteArray: ByteArray, fields: List<DataField>) {
 
@@ -175,13 +169,10 @@ abstract class ConfigStructure(var version: Int = 1) {
 
     /**
      * Pack the given fields (in the given order and layout) into the
-     * passed ByteBuffer.
+     * [buffer], using the field layout in [fields].
      *
      * Only the fields will be stuffed into the ByteBuffer, no CRC will
      * be added.
-     *
-     * @param buffer the byte buffer to be written to
-     * @param fields the data field layout
      */
     private fun packFields(buffer: ByteBuffer, fields: List<DataField>) {
         fields.forEach {
@@ -192,11 +183,8 @@ abstract class ConfigStructure(var version: Int = 1) {
 
     /**
      * Unpack the given fields (in the given order and layout) from the
-     * passed ByteBuffer. The CRC will not be extracted and is expected
-     * to be the next bytes in the buffer.
-     *
-     * @param buffer the byte buffer to be read from
-     * @param fields the data field layout for parsing the fields
+     * [buffer], using the field layout in [fields]. The CRC will not be extracted
+     * and is expected to be the next bytes in the buffer.
      */
     private fun unpackFields(buffer: ByteBuffer, fields: List<DataField>) {
         fields.forEach {
@@ -205,11 +193,8 @@ abstract class ConfigStructure(var version: Int = 1) {
     }
 
     /**
-     * Read the next bytes and interpret them as CRC value. Unpack the value
-     * and return it.
-     *
-     * @param buffer the byte buffer to be read from
-     * @return the CRC16 value read from the byte buffer
+     * Read the next bytes from [buffer] and interpret them as CRC value. Unpack the value
+     * and return the CRC as value.
      */
     private fun readCrc16(buffer: ByteBuffer): UShort {
         return buffer.short.toUShort()
@@ -217,10 +202,7 @@ abstract class ConfigStructure(var version: Int = 1) {
 
 
     /**
-     * Write the CRC number to the buffer.
-     *
-     * @param buffer the byte buffer to be written to (on the current position)
-     * @param crc the CRC16 value to be written to the byte buffer
+     * Write the [crc] (CRC16 value) to the [buffer] at the current position.
      */
     private fun writeCrc16(buffer: ByteBuffer, crc: UShort) {
         buffer.putShort(crc.toShort())
@@ -228,11 +210,8 @@ abstract class ConfigStructure(var version: Int = 1) {
 
 
     /**
-     * Calculate CRC16 over the given ByteBuffer content. The buffer will be
+     * Calculate and return the CRC16 over [buffer]. The [buffer] will be
      * unchanged, since this function operates on a duplicate.
-     *
-     * @param buffer the ByteBuffer over which the CRC16 will be calculated
-     * @return the calculated CRC16 value
      */
     private fun calculateCrc16(buffer: ByteBuffer): UShort {
         return buffer.duplicate().let {
@@ -267,13 +246,13 @@ interface DataField {
     val name: String
 
     /**
-     * Write the value of this data field to an existing ByteBuffer, modifying it.
+     * Write the value of this object's data field to [buffer], thus modifying it.
      */
     fun writeTo(buffer: ByteBuffer)
 
     /**
-     * Retrieve the value of this data field by consuming the appropriate number
-     * of bytes from the ByteBuffer and converting them into the data field value.
+     * Retrieve the value of this object's data field by consuming the appropriate number
+     * of bytes from [buffer] and converting them into the data field value.
      */
     fun getFrom(buffer: ByteBuffer)
 }
@@ -374,11 +353,6 @@ class NullBytes(override val name: String, override val size: Int) : DataField {
  * The POF config structure of a wireless sensor node
  */
 class ConfigPof(
-
-    // FIXME Nulls erlauben? Falls zB eine Version der ConfigStruct bestimmte Felder
-    // noch nicht kennt, sollten die ja null sein, oder? Damit das UI das
-    // visualisieren kann. Oder gibt es immer DefaultValues (so wie hier aktuell
-    // implementiert)?
     val pofStructVersion: UInt8 = UInt8("pofStructVersion"),
     val hwNumber: UInt16 = UInt16("hwNumber"),
     val cpuSerial: UInt32 = UInt32("cpuSerial"),
@@ -421,6 +395,18 @@ class ConfigPof(
 
 
 /**
+ * Helper function which prints the bytes of a byte array on stdout.
+ */
+fun printByteArray(comment: String, byteArray: ByteArray) {
+    println(comment)
+    byteArray.forEach {
+        val b = it.toUByte()
+        print("  $b")
+    }
+    println()
+}
+
+/**
  * Example for decoding a byte stream into a config object.
  */
 @OptIn(ExperimentalUnsignedTypes::class)
@@ -451,7 +437,7 @@ fun decodeConfig() {
     // serialize: read from the config values into the serialized bytes
     val byteArray2 = configPof.pack()
 
-    printByteArray("bytearray of newly packed configPof is: ", byteArray2)
+    printByteArray("bytearray of newly packed configPof (in version ${configPof.version}) is: ", byteArray2)
 
     println(configPof)
 //    print("configPof: hwNumber=%04x".format(configPof.hwNumber.value.toInt()))
@@ -460,17 +446,6 @@ fun decodeConfig() {
     println("cpuSerial is: ${configPof.cpuSerial.value}")
 }
 
-/**
- * Helper function which prints the bytes of a byte array on stdout.
- */
-fun printByteArray(comment: String, byteArray: ByteArray) {
-    println(comment)
-    byteArray.forEach {
-        val b = it.toUByte()
-        print("  $b")
-    }
-    println()
-}
 
 fun main() {
     decodeConfig()
